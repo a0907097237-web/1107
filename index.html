@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>聖誕夜反應力挑戰</title>
+    <style>
+        body {
+            margin: 0;
+            background: #0f172a;
+            color: #fff;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+            user-select: none;
+        }
+        .container {
+            position: relative;
+            width: 420px;
+            height: 600px;
+            background: #1e293b;
+            border-radius: 24px;
+            border: 2px solid #334155;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+        }
+        .header {
+            display: flex;
+            justify-content: space-around;
+            padding: 18px;
+            background: rgba(15, 23, 42, 0.9);
+            font-weight: bold;
+            font-size: 16px;
+            border-bottom: 1px solid #334155;
+            z-index: 5;
+        }
+        
+        /* 遊戲主要互動畫布 */
+        .canvas {
+            position: relative;
+            flex: 1;
+            background: radial-gradient(circle at center, #1e293b 0%, #0f172a 100%);
+            cursor: crosshair;
+            overflow: hidden;
+        }
+        
+        /* 🎄 固定的底部背景裝飾層（獨立於 canvas 外，絕對不會被洗掉） */
+        .bg-decorations {
+            position: absolute;
+            bottom: 15px;
+            left: 0;
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            padding: 0 25px;
+            pointer-events: none;
+            z-index: 2; /* 確保在背景上方但低於遊戲道具 */
+            opacity: 0.35; /* 微微透明，不干擾遊戲 */
+        }
+
+        .tree-group {
+            font-size: 55px;
+            display: flex;
+            gap: 10px;
+        }
+
+        .santa-static {
+            font-size: 65px;
+        }
+
+        .overlay {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(15, 23, 42, 0.92);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 20;
+            text-align: center;
+            padding: 20px;
+        }
+        .btn {
+            background: #ef4444;
+            color: white;
+            border: none;
+            padding: 12px 35px;
+            font-size: 16px;
+            font-weight: bold;
+            border-radius: 25px;
+            cursor: pointer;
+            margin-top: 20px;
+            box-shadow: 0 4px 15px rgba(239, 68, 68, 0.4);
+            transition: transform 0.1s;
+        }
+        .btn:hover { background: #dc2626; transform: translateY(-2px); }
+        .btn:active { transform: translateY(0); }
+
+        .item {
+            position: absolute;
+            width: 64px;
+            height: 64px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 30px;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            z-index: 10; /* 道具層級最高，方便點擊 */
+            animation: popIn 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        @keyframes popIn {
+            0% { transform: scale(0); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .star { background: #422006; border: 3px solid #fbbf24; }
+        .bomb { background: #450a0a; border: 3px solid #f87171; }
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="header">
+        <div>分數: <span id="score">0</span></div>
+        <div>時間: <span id="timer">30</span>s</div>
+    </div>
+    
+    <div class="canvas" id="canvas">
+        <!-- 遊戲互動區：道具會在這裡隨機生成 -->
+    </div>
+
+    <!-- 底部背景裝飾：左側聖誕樹群、右側靜止聖誕老人（獨立固定） -->
+    <div class="bg-decorations">
+        <div class="tree-group">
+            <span>🎄</span><span>⭐</span>
+        </div>
+        <div class="santa-static">
+            🎅
+        </div>
+    </div>
+
+    <div id="screen" class="overlay">
+        <h1>🎅 聖誕夜反應挑戰 🎄</h1>
+        <p>點擊聖誕星星 ⭐ 獲得分數！<br>注意：點到 💣 炸彈會被扣分喔！</p>
+        <button class="btn" onclick="startGame()">開始遊戲</button>
+    </div>
+</div>
+
+<script>
+    let score = 0;
+    let timer = 30;
+    let isPlaying = false;
+    let timerInterval, spawnInterval;
+
+    const scoreEl = document.getElementById('score');
+    const timerEl = document.getElementById('timer');
+    const canvas = document.getElementById('canvas');
+    const screen = document.getElementById('screen');
+
+    function startGame() {
+        score = 0;
+        timer = 30;
+        scoreEl.textContent = score;
+        timerEl.textContent = timer;
+        screen.classList.add('hidden');
+        
+        // 清除畫布上的遊戲物件
+        canvas.querySelectorAll('.item').forEach(el => el.remove());
+        isPlaying = true;
+
+        clearInterval(timerInterval);
+        clearInterval(spawnInterval);
+
+        timerInterval = setInterval(() => {
+            timer--;
+            timerEl.textContent = timer;
+            if (timer <= 0) {
+                endGame();
+            }
+        }, 1000);
+
+        spawnInterval = setInterval(spawnItem, 850);
+    }
+
+    function spawnItem() {
+        if (!isPlaying) return;
+
+        const item = document.createElement('div');
+        const isBomb = Math.random() < 0.25; // 25% 機率出現炸彈
+        
+        item.className = `item ${isBomb ? 'bomb' : 'star'}`;
+        item.innerHTML = isBomb ? '💣' : '⭐';
+
+        const maxX = canvas.clientWidth - 70;
+        const maxY = canvas.clientHeight - 70;
+        item.style.left = Math.floor(Math.random() * maxX) + 'px';
+        item.style.top = Math.floor(Math.random() * maxY) + 'px';
+
+        item.onmousedown = (e) => {
+            e.stopPropagation();
+            if (!isPlaying) return;
+            
+            if (isBomb) {
+                score = Math.max(0, score - 3);
+                item.style.transform = 'scale(0.5)';
+            } else {
+                score += 1;
+                item.style.transform = 'scale(1.25)';
+            }
+            scoreEl.textContent = score;
+            
+            item.style.opacity = '0';
+            setTimeout(() => item.remove(), 100);
+        };
+
+        canvas.appendChild(item);
+
+        // 存在 1.4 秒後自動消失
+        setTimeout(() => {
+            if (item.parentElement) {
+                item.style.opacity = '0';
+                setTimeout(() => item.remove(), 150);
+            }
+        }, 1400);
+    }
+
+    function endGame() {
+        isPlaying = false;
+        clearInterval(timerInterval);
+        clearInterval(spawnInterval);
+        canvas.querySelectorAll('.item').forEach(el => el.remove());
+        
+        screen.querySelector('h1').textContent = "時間到！🎉";
+        screen.querySelector('p').innerHTML = `你在聖誕夜總共收集了 <br><b style="font-size: 24px; color: #fbbf24;">${score}</b> 分！`;
+        screen.querySelector('.btn').textContent = "再玩一次";
+        screen.classList.remove('hidden');
+    }
+</script>
+
+</body>
+</html>
